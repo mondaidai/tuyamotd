@@ -16,7 +16,7 @@ static int save_action_to_file(const char * str)
 		return EINVAL;
 	}
 
-	FILE *fp = fopen(ACTION_LOG_FILE, "a");
+	FILE *fp = fopen(g_app_config.action_log_file, "a");
 	if(!fp) {
 		return errno;
 	}
@@ -59,7 +59,7 @@ static void process_action(const char * payload)
 			ret = handle_save_log(params);
 			
 			if(ret == 0) {
-				syslog(LOG_DEBUG, "Action received: payload saved to %s", ACTION_LOG_FILE);
+				syslog(LOG_DEBUG, "Action received: payload saved to %s", g_app_config.action_log_file);
 			} else if (ret == EINVAL) {
 				syslog(LOG_WARNING, "Action %s invalid payload", action->valuestring);
 			} else {

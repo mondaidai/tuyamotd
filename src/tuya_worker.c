@@ -14,8 +14,9 @@ void * tuya_worker(void * arg)
 	tuya_worker_ctx_t *ctx = arg;
 	int ret;
 
-	const unsigned int mqtt_backoff_cap = 30 * 60;
-	unsigned int mqtt_retry_sleep = 1;
+	const app_config_t *cfg = ctx && ctx->config ? ctx->config : NULL;
+	const unsigned int mqtt_backoff_cap = cfg && cfg->mqtt_backoff_cap_sec ? cfg->mqtt_backoff_cap_sec : DEFAULT_MQTT_BACKOFF_CAP_SEC;
+	unsigned int mqtt_retry_sleep = cfg && cfg->mqtt_initial_retry_delay ? cfg->mqtt_initial_retry_delay : DEFAULT_MQTT_INITIAL_RETRY_DELAY_MS;
 	time_t mqtt_failure_start = 0;
 
 	cpu_usage_init();
@@ -64,7 +65,7 @@ void * tuya_worker(void * arg)
 
 		if (mqtt_failure_start == 0) {
 			mqtt_failure_start = time(NULL);
-		} else if ((time(NULL) - mqtt_failure_start) >= MQTT_TOTAL_FAILURE_TIMEOUT) {
+		} else if ((time(NULL) - mqtt_failure_start) >= (cfg ? cfg->mqtt_failure_timeout_sec : DEFAULT_MQTT_TOTAL_FAILURE_TIMEOUT)) {
 			syslog(LOG_ERR, "MQTT failing for too long");
 			break;
 		}

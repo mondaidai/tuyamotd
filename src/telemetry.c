@@ -18,7 +18,7 @@ static monitoring_status_t telemetry_refresh(telemetry_ctx_t *ctx)
 		free_system_info(&new_info);
 		return status;
 	}
-
+	
 	pthread_mutex_lock(&ctx->lock);
 	free_system_info(&ctx->info);
 	ctx->info = new_info;

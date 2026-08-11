@@ -40,6 +40,8 @@ typedef enum {
 	APP_EXIT_THREAD_CREATE_FAILED = 8
 } app_exit_code_t;
 
+app_config_t g_app_config = {0};
+
 static inline int daemonize(void);
 
 int main(int argc, char * argv[]) 
@@ -65,11 +67,11 @@ int main(int argc, char * argv[])
 		.client = &client,
 		.state = &state,
 		.telemetry = &telemetry,
+		.config = &g_app_config,
 	};
 	pthread_t worker;
 
 	openlog("tuyamotd", LOG_PID | LOG_CONS, LOG_DAEMON);
-	setlogmask(LOG_UPTO(LOG_INFO)); // disable debug 
 	app_args args;
 
 	if(parse_args(argc, argv, &args) != 0)	
@@ -77,6 +79,13 @@ int main(int argc, char * argv[])
 		mret = APP_EXIT_INVALID_ARGS;
 		goto cleanup;
 	}
+
+	if (config_load(&g_app_config) != 0 || config_validate(&g_app_config) != 0) {
+		mret = APP_EXIT_INVALID_ARGS;
+		goto cleanup;
+	}
+
+	setlogmask(LOG_UPTO(g_app_config.log_level));
 
 	if(args.is_daemon) {
 		if(daemonize() != 0) {
@@ -89,14 +98,15 @@ int main(int argc, char * argv[])
 // ----------- Tuya MQTT Initialization and Connection -----------
 
 	ret = tuya_mqtt_init(&client, &(const tuya_mqtt_config_t) {
-		.host = TUYA_SERVER_DEFAULT_HOST,
-		.port = TUYA_SERVER_DEFAULT_PORT,
+		.host = g_app_config.mqtt_host,
+		.port = g_app_config.mqtt_port,
 		.cacert = tuya_cacert_pem,
 		.cacert_len = sizeof(tuya_cacert_pem),
 		.device_id = args.device_id,
 		.device_secret = args.device_secret,
-		.keepalive = TUYA_SERVER_DEFAULT_KEEPALIVE,
-		.timeout_ms = TUYA_MQTT_DEFAULT_TIMEOUT_MS,
+		.keepalive = g_app_config.mqtt_keepalive,
+		.timeout_ms = (g_app_config.mqtt_keepalive > 0) ?
+			(g_app_config.mqtt_keepalive * 1000u) : DEFAULT_MQTT_TIMEOUT_MS,
 		.on_connected = on_connected,
 		.on_disconnect = on_disconnect,
 		.on_messages = on_messages
@@ -144,7 +154,9 @@ int main(int argc, char * argv[])
 		goto cleanup_ubus;
 	}
 
-	if (telemetry_init(&telemetry, &mctx, DEFAULT_REPORT_INTERVAL_SEC * 1000) != 0) {
+	if (telemetry_init(&telemetry, &mctx,
+		g_app_config.telemetry_interval_ms ?
+		g_app_config.telemetry_interval_ms : g_app_config.report_interval_ms) != 0) {
 		syslog(LOG_ERR, "Failed to init telemetry");
 		mret = APP_EXIT_MONITORING_FAILED;
 		goto cleanup_ubus;
@@ -179,6 +191,7 @@ cleanup_tuya:
 	tuya_mqtt_disconnect(&client);
 	tuya_mqtt_deinit(&client);
 cleanup:
+	config_destroy(&g_app_config);
 	closelog();
 	return mret;
 }
