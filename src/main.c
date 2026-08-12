@@ -105,8 +105,7 @@ int main(int argc, char * argv[])
 		.device_id = args.device_id,
 		.device_secret = args.device_secret,
 		.keepalive = g_app_config.mqtt_keepalive,
-		.timeout_ms = (g_app_config.mqtt_keepalive > 0) ?
-			(g_app_config.mqtt_keepalive * 1000u) : DEFAULT_MQTT_TIMEOUT_MS,
+		.timeout_ms = DEFAULT_MQTT_TIMEOUT_MS,
 		.on_connected = on_connected,
 		.on_disconnect = on_disconnect,
 		.on_messages = on_messages
@@ -148,16 +147,16 @@ int main(int argc, char * argv[])
 
 	ubus_add_uloop(uctx);
 
-	if (ubus_api_init(uctx, &telemetry, &state) != 0) {
-		syslog(LOG_ERR, "Failed to init ubus API");
-		mret = APP_EXIT_MONITORING_FAILED;
-		goto cleanup_ubus;
-	}
-
 	if (telemetry_init(&telemetry, &mctx,
 		g_app_config.telemetry_interval_ms ?
 		g_app_config.telemetry_interval_ms : g_app_config.report_interval_ms) != 0) {
 		syslog(LOG_ERR, "Failed to init telemetry");
+		mret = APP_EXIT_MONITORING_FAILED;
+		goto cleanup_ubus;
+	}
+
+	if (ubus_api_init(uctx, &telemetry, &state) != 0) {
+		syslog(LOG_ERR, "Failed to init ubus API");
 		mret = APP_EXIT_MONITORING_FAILED;
 		goto cleanup_ubus;
 	}
@@ -167,13 +166,13 @@ int main(int argc, char * argv[])
 		syslog(LOG_ERR, "Failed to create worker thread");
     	goto cleanup_ubus;
 	}
+	
 	worker_started = true;
 
 	uloop_run();
 	keep_running = 0;
-	syslog(LOG_INFO, "Shutting down gracefully");
 	goto cleanup_ubus;
-
+	
 cleanup_ubus:
 	if (worker_started) {
 		keep_running = 0;
@@ -190,8 +189,9 @@ cleanup_ubus:
 cleanup_tuya:
 	tuya_mqtt_disconnect(&client);
 	tuya_mqtt_deinit(&client);
-cleanup:
+	cleanup:
 	config_destroy(&g_app_config);
+	syslog(LOG_INFO, "Shutting down gracefully");
 	closelog();
 	return mret;
 }

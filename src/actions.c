@@ -202,6 +202,7 @@ static size_t collect_grouped_interfaces(const system_info_t *info, grouped_inte
 
 		if (src->ip && src->ip[0] != '\0') {
 			if (src->family == FAMILY_IPV6) {
+				continue; //temporarily disable ipv6 addresses to prevent tuya cloud complaints
 				if (groups[group_index].ipv6_count < max_groups) {
 					snprintf(groups[group_index].ipv6[groups[group_index].ipv6_count].ip,
 					 sizeof(groups[group_index].ipv6[groups[group_index].ipv6_count].ip),
