@@ -80,7 +80,7 @@ int main(int argc, char * argv[])
 		goto cleanup;
 	}
 
-	if (config_load(&g_app_config) != 0 || config_validate(&g_app_config) != 0) {
+	if(config_load(&g_app_config) != 0 || config_validate(&g_app_config) != 0) {
 		mret = APP_EXIT_INVALID_ARGS;
 		goto cleanup;
 	}
@@ -147,15 +147,13 @@ int main(int argc, char * argv[])
 
 	ubus_add_uloop(uctx);
 
-	if (telemetry_init(&telemetry, &mctx,
-		g_app_config.telemetry_interval_ms ?
-		g_app_config.telemetry_interval_ms : g_app_config.report_interval_ms) != 0) {
+	if(telemetry_init(&telemetry, &mctx, g_app_config.telemetry_interval_ms) != 0) {
 		syslog(LOG_ERR, "Failed to init telemetry");
 		mret = APP_EXIT_MONITORING_FAILED;
 		goto cleanup_ubus;
 	}
 
-	if (ubus_api_init(uctx, &telemetry, &state) != 0) {
+	if(ubus_api_init(uctx, &telemetry, &state) != 0) {
 		syslog(LOG_ERR, "Failed to init ubus API");
 		mret = APP_EXIT_MONITORING_FAILED;
 		goto cleanup_ubus;
@@ -174,14 +172,14 @@ int main(int argc, char * argv[])
 	goto cleanup_ubus;
 	
 cleanup_ubus:
-	if (worker_started) {
+	if(worker_started) {
 		keep_running = 0;
 		pthread_join(worker, NULL);
 		worker_started = false;
 	}
 	telemetry_destroy(&telemetry);
 	monitoring_destroy(&mctx);
-	if (uctx) {
+	if(uctx) {
 		ubus_free(uctx);
 		uctx = NULL;
 	}

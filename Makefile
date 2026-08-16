@@ -9,7 +9,7 @@ include $(INCLUDE_DIR)/package.mk
 define Package/tuyamotd
 	CATEGORY:=Base system
 	TITLE:=tuyamotd
-	DEPENDS:=+tuya_iot_core +cJSON +libubus +libubox +libblobmsg-json +libpthread +libuci
+	DEPENDS:=+tuya_iot_core +cJSON +libubus +libubox +libblobmsg-json +libpthread +libuci +rpcd +lua +libubus-lua
 endef
 
 define Package/tuyamotd/description
