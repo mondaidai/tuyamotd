@@ -9,6 +9,22 @@
 #include <time.h>
 #include <syslog.h>
 
+static inline bool is_time_to_report(daemon_state_t *state, const app_config_t *cfg)
+{
+	if (!state || !cfg || cfg->report_interval_ms == 0) {
+		return true;
+	}
+
+	time_t now = time(NULL);
+	time_t last_report = 0;
+
+	pthread_mutex_lock(&state->lock);
+	last_report = state->last_report_time;
+	pthread_mutex_unlock(&state->lock);
+
+	return (now - last_report) * 1000 >= cfg->report_interval_ms;
+}
+
 void * tuya_worker(void * arg)
 {
 	tuya_worker_ctx_t *ctx = arg;
@@ -33,6 +49,10 @@ void * tuya_worker(void * arg)
 			mqtt_retry_sleep = 1;
 
 			if (ctx->telemetry) {
+				if (!is_time_to_report(ctx->state, cfg)) {
+					continue;
+				}
+
 				system_info_t report_info = {0};
 				if (telemetry_take(&report_info, ctx->telemetry)) {
 					ret = send_system_info(ctx->client, &report_info);
