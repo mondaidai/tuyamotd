@@ -17,8 +17,8 @@ BUILD_DIR := build
 TARGET := tuyamotd
 
 SRCS := \
-	$(wildcard *.c) \
-	$(wildcard monitoring/*.c)
+    $(wildcard src/*.c) \
+    $(wildcard src/monitoring/*.c)
 
 OBJS := $(addprefix $(OBJ_DIR)/,$(SRCS:.c=.o))
 
