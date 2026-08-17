@@ -58,8 +58,10 @@ static void system_info_cb(struct ubus_request * req, int type, struct blob_attr
 }
 
 monitoring_status_t fetch_system_info(monitoring_ctx * mctx, struct call_system_info * sdata) {
-    sdata->status_code = -999;
-    if(ubus_invoke(mctx->uctx, mctx->system_id, "info", NULL, system_info_cb, sdata, UBUS_TIMEOUT)) {
+	sdata->status_code = -999;
+	uint32_t timeout = mctx->ubus_timeout_ms;
+	
+	if(ubus_invoke(mctx->uctx, mctx->system_id, "info", NULL, system_info_cb, sdata, timeout)) {
 		return MONITORING_ERR_UBUS_INVOKE;
 	}
 	

@@ -145,6 +145,9 @@ int main(int argc, char * argv[])
 		goto cleanup_ubus;
 	}
 
+	// set ubus call timeout from config
+	mctx.ubus_timeout_ms = g_app_config.ubus_timeout_ms;
+
 	ubus_add_uloop(uctx);
 
 	if(telemetry_init(&telemetry, &mctx, g_app_config.telemetry_interval_ms) != 0) {

@@ -37,7 +37,7 @@ void * tuya_worker(void * arg)
 
 	cpu_usage_init();
 
-	while (keep_running) {
+	while(keep_running) {
 		ret = tuya_mqtt_loop(ctx->client);
 
 		if (ret == OPRT_OK) {

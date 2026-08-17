@@ -343,9 +343,10 @@ monitoring_status_t fetch_interface_info(monitoring_ctx * mctx, network_interfac
 	struct interface_callback_data data = {0};
 	monitoring_status_t status = MONITORING_ERR_INTERFACE;
 
-	(void)mctx;
+	uint32_t timeout = mctx->ubus_timeout_ms;
+
 	int invoke_ret = ubus_invoke(mctx->uctx, mctx->network_device_id, "status", NULL,
-		network_device_status_cb, &data, UBUS_TIMEOUT);
+		network_device_status_cb, &data, timeout);
 	if (invoke_ret != 0) {
 		status = MONITORING_ERR_UBUS_INVOKE;
 		goto cleanup;
@@ -360,7 +361,7 @@ monitoring_status_t fetch_interface_info(monitoring_ctx * mctx, network_interfac
 
 	// invoking network.interface dump
 	invoke_ret = ubus_invoke(mctx->uctx, mctx->network_interface_id, "dump", NULL,
-		network_interface_dump_cb, &data, UBUS_TIMEOUT);
+		network_interface_dump_cb, &data, timeout);
 	if (invoke_ret != 0) {
 		status = MONITORING_ERR_UBUS_INVOKE;
 		goto cleanup;

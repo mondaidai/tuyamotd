@@ -6,8 +6,6 @@
 #include <arpa/inet.h>
 #include <libubus.h>
 
-#define UBUS_TIMEOUT 3000
-
 typedef enum {
 	MONITORING_OK = 0,
 
@@ -73,6 +71,7 @@ typedef struct {
 	uint32_t system_id;
 	uint32_t network_device_id;
 	uint32_t network_interface_id;
+    uint32_t ubus_timeout_ms;
 } monitoring_ctx;
 
 struct call_system_info {
