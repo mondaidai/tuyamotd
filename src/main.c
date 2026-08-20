@@ -11,8 +11,6 @@
 #include <libubus.h>
 
 #include "signals.h"
-#include "monitoring.h"
-#include "telemetry.h"
 #include "cli.h"
 #include "actions.h"
 #include "config.h"
@@ -22,7 +20,7 @@
 
 #include "ubus_api.h"
 #include "daemon_state.h"
-#include "tuya_worker.h"
+#include "esp_actions.h"
 
 typedef enum {
     APP_EXIT_SUCCESS = 0,
@@ -54,7 +52,7 @@ int main(int argc, char * argv[])
 	int mret = APP_EXIT_SUCCESS;
 	int ret = OPRT_OK;
 	tuya_mqtt_context_t client;
-	monitoring_ctx mctx = {0};
+	esp_ctx ectx = {0};
 	struct ubus_context * uctx = NULL;
 	telemetry_ctx_t telemetry = {0};
 	bool worker_started = false;
@@ -140,21 +138,15 @@ int main(int argc, char * argv[])
 		goto cleanup_ubus;
 	}
 
-	if(monitoring_init(&mctx, uctx) != MONITORING_OK) {
-		syslog(LOG_ERR, "Failed to init monitoring module");
+	if (esp_init(&ectx, uctx) != ESP_OK) {
+		syslog(LOG_ERR, "Failed to init esp actions module");
 		goto cleanup_ubus;
 	}
 
-	// set ubus call timeout from config
-	mctx.ubus_timeout_ms = g_app_config.ubus_timeout_ms;
+	/* set ubus timeout from config */
+	ectx.ubus_timeout_ms = g_app_config.ubus_timeout_ms;
 
 	ubus_add_uloop(uctx);
-
-	if(telemetry_init(&telemetry, &mctx, g_app_config.telemetry_interval_ms) != 0) {
-		syslog(LOG_ERR, "Failed to init telemetry");
-		mret = APP_EXIT_MONITORING_FAILED;
-		goto cleanup_ubus;
-	}
 
 	if(ubus_api_init(uctx, &telemetry, &state) != 0) {
 		syslog(LOG_ERR, "Failed to init ubus API");
@@ -162,26 +154,12 @@ int main(int argc, char * argv[])
 		goto cleanup_ubus;
 	}
 
-	if(pthread_create(&worker, NULL, tuya_worker, &worker_ctx) != 0) {
-    	mret = APP_EXIT_THREAD_CREATE_FAILED;
-		syslog(LOG_ERR, "Failed to create worker thread");
-    	goto cleanup_ubus;
-	}
-	
-	worker_started = true;
-
 	uloop_run();
-	keep_running = 0;
 	goto cleanup_ubus;
 	
 cleanup_ubus:
-	if(worker_started) {
-		keep_running = 0;
-		pthread_join(worker, NULL);
-		worker_started = false;
-	}
-	telemetry_destroy(&telemetry);
-	monitoring_destroy(&mctx);
+
+	esp_destroy(&ectx);
 	if(uctx) {
 		ubus_free(uctx);
 		uctx = NULL;

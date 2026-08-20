@@ -213,16 +213,10 @@ int config_load(app_config_t * conf)
 	if(!conf) return -1;
 
 	conf->mqtt_host = NULL;
-	conf->action_log_file = NULL;
 
 	conf->ubus_timeout_ms = DEFAULT_UBUS_TIMEOUT_MS;
-	conf->report_interval_ms = DEFAULT_REPORT_INTERVAL_MS;
 	conf->mqtt_port = DEFAULT_SERVER_PORT;
 	conf->mqtt_keepalive = DEFAULT_SERVER_KEEPALIVE;
-	conf->telemetry_interval_ms = DEFAULT_TELEMETRY_INTERVAL_MS;
-	conf->mqtt_failure_timeout_sec = DEFAULT_MQTT_TOTAL_FAILURE_TIMEOUT;
-	conf->mqtt_initial_retry_delay = DEFAULT_MQTT_INITIAL_RETRY_DELAY_SEC;
-	conf->mqtt_backoff_cap_sec = DEFAULT_MQTT_BACKOFF_CAP_SEC;
 	conf->log_level = LOG_INFO;
 
 	cursor = uci_alloc_context();
@@ -240,12 +234,6 @@ int config_load(app_config_t * conf)
 						   &conf->mqtt_host))
 		goto error;
 
-	if(load_string_option(cursor,
-						   "tuyamotd.log.file",
-						   DEFAULT_ACTION_LOG_FILE,
-						   &conf->action_log_file))
-		goto error;
-
 	load_u16_option(cursor,
 					"tuyamotd.mqtt.port",
 					DEFAULT_SERVER_PORT,
@@ -254,26 +242,6 @@ int config_load(app_config_t * conf)
 					"tuyamotd.mqtt.keepalive",
 					DEFAULT_SERVER_KEEPALIVE,
 					&conf->mqtt_keepalive);
-	load_u16_option(cursor,
-					"tuyamotd.mqtt.failure_timeout_sec",
-					DEFAULT_MQTT_TOTAL_FAILURE_TIMEOUT,
-					&conf->mqtt_failure_timeout_sec);
-	load_u16_option(cursor,
-					"tuyamotd.mqtt.initial_retry_delay_sec",
-					DEFAULT_MQTT_INITIAL_RETRY_DELAY_SEC,
-					&conf->mqtt_initial_retry_delay);
-	load_u16_option(cursor,
-					"tuyamotd.mqtt.backoff_cap_sec",
-					DEFAULT_MQTT_BACKOFF_CAP_SEC,
-					&conf->mqtt_backoff_cap_sec);
-	load_u32_option(cursor,
-					"tuyamotd.telemetry.report_interval_ms",
-					DEFAULT_REPORT_INTERVAL_MS,
-					&conf->report_interval_ms);
-	load_u32_option(cursor,
-					"tuyamotd.telemetry.telemetry_interval_ms",
-					DEFAULT_TELEMETRY_INTERVAL_MS,
-					&conf->telemetry_interval_ms);
 	load_u32_option(cursor,
 					"tuyamotd.system.ubus_timeout_ms",
 					DEFAULT_UBUS_TIMEOUT_MS,
@@ -292,10 +260,8 @@ error:
 	uci_free_context(cursor);
 
 	free(conf->mqtt_host);
-	free(conf->action_log_file);
 
 	conf->mqtt_host = NULL;
-	conf->action_log_file = NULL;
 
 	return -1;
 }
@@ -311,19 +277,6 @@ void config_destroy(app_config_t * conf)
 int config_validate(const app_config_t * conf)
 {
 	if(!conf) return -1;
-
-	if(conf->action_log_file == NULL) {
-		syslog(LOG_ERR, "Invalid config: action_log_file is missing");
-		return -1;
-	}
-		
-	FILE * fp = fopen(conf->action_log_file, "a");
-	if(fp == NULL) {
-		syslog(LOG_ERR, "Invalid configuration (cannot open log file %s): %s", 
-			   conf->action_log_file, strerror(errno));
-		return -2;
-	}
-	fclose(fp);
 
 	switch(conf->log_level)
 	{
@@ -347,23 +300,6 @@ int config_validate(const app_config_t * conf)
 	if(conf->mqtt_host == NULL || conf->mqtt_host[0] == '\0') {
 		syslog(LOG_ERR, "Invalid config: mqtt_host must not be empty");
 		return -4;
-	}
-		
-	if(conf->mqtt_initial_retry_delay == 0) {
-		syslog(LOG_ERR, "Invalid config: mqtt_initial_retry_delay cannot be 0");
-		return -5;
-	}
-
-	if(conf->mqtt_initial_retry_delay > conf->mqtt_backoff_cap_sec) {
-		syslog(LOG_ERR, "Invalid config: initial retry delay (%u) cannot exceed backoff cap (%u)",
-			   conf->mqtt_initial_retry_delay, conf->mqtt_backoff_cap_sec);
-		return -6;
-	}
-
-	if(conf->mqtt_failure_timeout_sec < conf->mqtt_initial_retry_delay) {
-		syslog(LOG_ERR, "Invalid config: failure timeout (%u) is shorter than initial retry delay (%u)",
-			   conf->mqtt_failure_timeout_sec, conf->mqtt_initial_retry_delay);
-		return -7;
 	}
 
 	return 0;
