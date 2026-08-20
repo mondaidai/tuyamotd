@@ -55,19 +55,10 @@ int main(int argc, char * argv[])
 	esp_ctx ectx = {0};
 	struct ubus_context * uctx = NULL;
 	telemetry_ctx_t telemetry = {0};
-	bool worker_started = false;
 
 	daemon_state_t state = {
 		.lock = PTHREAD_MUTEX_INITIALIZER
 	};
-
-	tuya_worker_ctx_t worker_ctx = {
-		.client = &client,
-		.state = &state,
-		.telemetry = &telemetry,
-		.config = &g_app_config,
-	};
-	pthread_t worker;
 
 	openlog("tuyamotd", LOG_PID | LOG_CONS, LOG_DAEMON);
 	app_args args;

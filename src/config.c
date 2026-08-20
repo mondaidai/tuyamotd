@@ -270,7 +270,6 @@ void config_destroy(app_config_t * conf)
 {
 	if(!conf) return;
 	free(conf->mqtt_host);
-	free(conf->action_log_file);
 	memset(conf, 0, sizeof(app_config_t));
 	return;
 }
@@ -425,46 +424,6 @@ int config_flush(app_config_t *conf)
 	if (rc != UCI_OK)
 		goto cleanup;
 
-	snprintf(buf, sizeof(buf), "%u", conf->mqtt_failure_timeout_sec);
-	rc = config_set_field_internal(
-			cursor,
-			"tuyamotd.mqtt.failure_timeout_sec",
-			buf);
-	if (rc != UCI_OK)
-		goto cleanup;
-
-	snprintf(buf, sizeof(buf), "%u", conf->mqtt_initial_retry_delay);
-	rc = config_set_field_internal(
-			cursor,
-			"tuyamotd.mqtt.initial_retry_delay_sec",
-			buf);
-	if (rc != UCI_OK)
-		goto cleanup;
-
-	snprintf(buf, sizeof(buf), "%u", conf->mqtt_backoff_cap_sec);
-	rc = config_set_field_internal(
-			cursor,
-			"tuyamotd.mqtt.backoff_cap_sec",
-			buf);
-	if (rc != UCI_OK)
-		goto cleanup;
-
-	snprintf(buf, sizeof(buf), "%u", conf->report_interval_ms);
-	rc = config_set_field_internal(
-			cursor,
-			"tuyamotd.telemetry.report_interval_ms",
-			buf);
-	if (rc != UCI_OK)
-		goto cleanup;
-
-	snprintf(buf, sizeof(buf), "%u", conf->telemetry_interval_ms);
-	rc = config_set_field_internal(
-			cursor,
-			"tuyamotd.telemetry.telemetry_interval_ms",
-			buf);
-	if (rc != UCI_OK)
-		goto cleanup;
-
 	snprintf(buf, sizeof(buf), "%u", conf->ubus_timeout_ms);
 	rc = config_set_field_internal(
 			cursor,
@@ -478,13 +437,6 @@ int config_flush(app_config_t *conf)
 			cursor,
 			"tuyamotd.log.level",
 			buf);
-	if (rc != UCI_OK)
-		goto cleanup;
-
-	rc = config_set_field_internal(
-			cursor,
-			"tuyamotd.log.file",
-			conf->action_log_file);
 	if (rc != UCI_OK)
 		goto cleanup;
 
