@@ -4,25 +4,20 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include <stdbool.h>
 #include <libubox/uloop.h>
 #include <libubox/blobmsg_json.h>
 #include <libubus.h>
 
 #include "signals.h"
-#include "monitoring.h"
-#include "telemetry.h"
 #include "cli.h"
 #include "actions.h"
 #include "config.h"
+#include "esp_actions.h"
+
 #include "tuya_cacert.h"
 #include "tuya_error_code.h"
 #include "tuyalink_core.h"
-
-#include "ubus_api.h"
-#include "daemon_state.h"
-#include "tuya_worker.h"
 
 typedef enum {
     APP_EXIT_SUCCESS = 0,
@@ -40,7 +35,6 @@ typedef enum {
 	APP_EXIT_THREAD_CREATE_FAILED = 8
 } app_exit_code_t;
 
-app_config_t g_app_config = {0};
 
 static inline int daemonize(void);
 
@@ -51,25 +45,12 @@ int main(int argc, char * argv[])
 	Signal(SIGHUP, handle_signal);
 	Signal(SIGQUIT, handle_signal);
 	
+	app_config_t app_config = {0};
 	int mret = APP_EXIT_SUCCESS;
 	int ret = OPRT_OK;
 	tuya_mqtt_context_t client;
-	monitoring_ctx mctx = {0};
+	esp_ctx ectx = {0};
 	struct ubus_context * uctx = NULL;
-	telemetry_ctx_t telemetry = {0};
-	bool worker_started = false;
-
-	daemon_state_t state = {
-		.lock = PTHREAD_MUTEX_INITIALIZER
-	};
-
-	tuya_worker_ctx_t worker_ctx = {
-		.client = &client,
-		.state = &state,
-		.telemetry = &telemetry,
-		.config = &g_app_config,
-	};
-	pthread_t worker;
 
 	openlog("tuyamotd", LOG_PID | LOG_CONS, LOG_DAEMON);
 	app_args args;
@@ -80,12 +61,12 @@ int main(int argc, char * argv[])
 		goto cleanup;
 	}
 
-	if(config_load(&g_app_config) != 0 || config_validate(&g_app_config) != 0) {
+	if(config_load(&app_config) != 0 || config_validate(&app_config) != 0) {
 		mret = APP_EXIT_INVALID_ARGS;
 		goto cleanup;
 	}
 
-	setlogmask(LOG_UPTO(g_app_config.log_level));
+	setlogmask(LOG_UPTO(app_config.log_level));
 
 	if(args.is_daemon) {
 		if(daemonize() != 0) {
@@ -98,17 +79,18 @@ int main(int argc, char * argv[])
 // ----------- Tuya MQTT Initialization and Connection -----------
 
 	ret = tuya_mqtt_init(&client, &(const tuya_mqtt_config_t) {
-		.host = g_app_config.mqtt_host,
-		.port = g_app_config.mqtt_port,
+		.host = app_config.mqtt_host,
+		.port = app_config.mqtt_port,
 		.cacert = tuya_cacert_pem,
 		.cacert_len = sizeof(tuya_cacert_pem),
 		.device_id = args.device_id,
 		.device_secret = args.device_secret,
-		.keepalive = g_app_config.mqtt_keepalive,
+		.keepalive = app_config.mqtt_keepalive,
 		.timeout_ms = DEFAULT_MQTT_TIMEOUT_MS,
 		.on_connected = on_connected,
 		.on_disconnect = on_disconnect,
-		.on_messages = on_messages
+		.on_messages = on_messages,
+		.user_data = (void*)&ectx
 	});
 
 	if(ret != OPRT_OK)
@@ -130,8 +112,6 @@ int main(int argc, char * argv[])
 	
 // ----------- UBus Initialization and Monitoring Setup -----------
 
-	uloop_init();
-
 	uctx = ubus_connect(NULL);
 	
 	if(!uctx) {
@@ -140,58 +120,67 @@ int main(int argc, char * argv[])
 		goto cleanup_ubus;
 	}
 
-	if(monitoring_init(&mctx, uctx) != MONITORING_OK) {
-		syslog(LOG_ERR, "Failed to init monitoring module");
+	if(esp_init(&ectx, uctx) != ESP_OK) {
+		syslog(LOG_ERR, "Failed to init esp actions module");
 		goto cleanup_ubus;
 	}
 
-	// set ubus call timeout from config
-	mctx.ubus_timeout_ms = g_app_config.ubus_timeout_ms;
+	/* set ubus timeout from config */
+	ectx.ubus_timeout_ms = app_config.ubus_timeout_ms;
 
-	ubus_add_uloop(uctx);
+	const int mqtt_failure_timeout_sec = 6*60*60;
+	const int mqtt_backoff_cap = 30*60; 
+	long mqtt_retry_sleep, mqtt_failure_start;
 
-	if(telemetry_init(&telemetry, &mctx, g_app_config.telemetry_interval_ms) != 0) {
-		syslog(LOG_ERR, "Failed to init telemetry");
-		mret = APP_EXIT_MONITORING_FAILED;
-		goto cleanup_ubus;
+	while(keep_running) {
+		ret = tuya_mqtt_loop(&client);
+
+		if(ret == OPRT_OK) {
+			mqtt_failure_start = 0;
+			mqtt_retry_sleep = 1;
+			continue;
+		}
+
+		if(ret == OPRT_INVALID_PARM) {
+			syslog(LOG_ERR, "tuya_mqtt_loop invalid parameter");
+			break;
+		}
+
+		if(mqtt_failure_start == 0) {
+			mqtt_failure_start = time(NULL);
+		} else if((time(NULL) - mqtt_failure_start) >= mqtt_failure_timeout_sec) {
+			syslog(LOG_ERR, "MQTT failing for too long");
+			break;
+		}
+
+		syslog(LOG_WARNING, "tuya_mqtt_loop returned %d, retrying in %u seconds", ret, mqtt_retry_sleep);
+
+		for (unsigned int i = 0; i < mqtt_retry_sleep && keep_running; i++) {
+			sleep(1);
+		}
+
+		if(!keep_running)
+			break;
+
+		if(mqtt_retry_sleep < mqtt_backoff_cap) {
+			mqtt_retry_sleep *= 2;
+			if(mqtt_retry_sleep > mqtt_backoff_cap)
+				mqtt_retry_sleep = mqtt_backoff_cap;
+		}
 	}
-
-	if(ubus_api_init(uctx, &telemetry, &state) != 0) {
-		syslog(LOG_ERR, "Failed to init ubus API");
-		mret = APP_EXIT_MONITORING_FAILED;
-		goto cleanup_ubus;
-	}
-
-	if(pthread_create(&worker, NULL, tuya_worker, &worker_ctx) != 0) {
-    	mret = APP_EXIT_THREAD_CREATE_FAILED;
-		syslog(LOG_ERR, "Failed to create worker thread");
-    	goto cleanup_ubus;
-	}
-	
-	worker_started = true;
-
-	uloop_run();
-	keep_running = 0;
-	goto cleanup_ubus;
 	
 cleanup_ubus:
-	if(worker_started) {
-		keep_running = 0;
-		pthread_join(worker, NULL);
-		worker_started = false;
-	}
-	telemetry_destroy(&telemetry);
-	monitoring_destroy(&mctx);
+
+	esp_destroy(&ectx);
 	if(uctx) {
 		ubus_free(uctx);
 		uctx = NULL;
 	}
-	uloop_done();
 cleanup_tuya:
 	tuya_mqtt_disconnect(&client);
 	tuya_mqtt_deinit(&client);
-	cleanup:
-	config_destroy(&g_app_config);
+cleanup:
+	config_destroy(&app_config);
 	syslog(LOG_INFO, "Shutting down gracefully");
 	closelog();
 	return mret;

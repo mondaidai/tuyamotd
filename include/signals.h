@@ -6,7 +6,7 @@ extern volatile sig_atomic_t keep_running;
 
 typedef void Sigfunc(int);
 
-Sigfunc *Signal(int signo, Sigfunc *func);
+Sigfunc * Signal(int signo, Sigfunc *func);
 
 void handle_signal(int signo);
 

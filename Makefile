@@ -1,3 +1,5 @@
+CC ?= gcc
+
 CFLAGS := -Iinclude
 
 LDFLAGS := \
@@ -18,7 +20,8 @@ TARGET := tuyamotd
 
 SRCS := \
     $(wildcard src/*.c) \
-    $(wildcard src/monitoring/*.c)
+    $(wildcard src/esp_actions/*.c) \
+    $(wildcard src/actions/*.c)
 
 OBJS := $(addprefix $(OBJ_DIR)/,$(SRCS:.c=.o))
 
