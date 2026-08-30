@@ -30,37 +30,38 @@ typedef enum {
 typedef struct {
 	struct ubus_context * uctx;
 	uint32_t ubved_id;
-    uint32_t ubus_timeout_ms;
+	uint32_t ubus_timeout_ms;
 } esp_ctx;
 
 typedef struct {
-    int pin;
-    char * model;
-    char * sensor;
-    char * portname;
+	int pin;
+	char * model;
+	char * sensor;
+	char * portname;
 } esp_request_t;
 
 typedef struct {
-    char * portname;
-    int vid;
-    int pid;
+	char * portname;
+	int vid;
+	int pid;
 } esp_device_t;
 
 typedef struct {
-    esp_device_t * edl;
-    size_t size;
+	int ubus_status;
+	esp_device_t * edl;
+	size_t size;
 } esp_device_list_t;
 
 typedef struct {
-    esp_status_t esp_status;
-    int ubus_status; // check it if esp_status_t is no ESP_OK
-    int rc;
-    char * msg;
+	int ubus_status; // check it if esp_status_t is no ESP_OK
+	int rc;
+	char * msg;
 	char * data;
 } esp_response_t;
 
 int esp_init(esp_ctx * ectx, struct ubus_context * uctx);
 void esp_destroy(esp_ctx * ectx);
+int esp_reinit(esp_ctx * ectx);
 
 esp_status_t esp_turn_on_pin(esp_ctx * ectx, esp_request_t * params, esp_response_t * response);
 esp_status_t esp_turn_off_pin(esp_ctx * ectx, esp_request_t * params, esp_response_t * response);

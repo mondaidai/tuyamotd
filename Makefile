@@ -20,7 +20,8 @@ TARGET := tuyamotd
 
 SRCS := \
     $(wildcard src/*.c) \
-    $(wildcard src/esp_actions/*.c)
+    $(wildcard src/esp_actions/*.c) \
+    $(wildcard src/actions/*.c)
 
 OBJS := $(addprefix $(OBJ_DIR)/,$(SRCS:.c=.o))
 
