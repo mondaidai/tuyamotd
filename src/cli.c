@@ -4,7 +4,7 @@
 #include <string.h>
 
 static char doc[] =
-    "tuyamotd daemon";
+    "Tuya IoT Daemon";
 
 static char args_doc[] = "";
 
