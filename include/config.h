@@ -17,7 +17,7 @@ extern app_config_t g_app_config;
 #define DEFAULT_SERVER_KEEPALIVE 60
 #define DEFAULT_UBUS_TIMEOUT_MS 5000
 
-#define DEFAULT_MQTT_TIMEOUT_MS 3000
+#define DEFAULT_MQTT_TIMEOUT_MS 1000
 
 int config_load(app_config_t * conf);
 int config_flush(app_config_t * conf);

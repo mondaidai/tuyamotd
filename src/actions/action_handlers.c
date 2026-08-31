@@ -39,23 +39,6 @@ const char * action_error_to_string(action_error_t error)
 	}
 }
 
-static void set_action_error(esp_response_t *response, const char *message)
-{
-	if(!response)
-		return;
-
-	response->rc = -999;
-	free(response->msg);
-	response->msg = strdup(message);
-}
-
-static void ensure_action_message(esp_response_t *response)
-{
-	if(!response || response->msg)
-		return;
-
-	response->msg = strdup(response->rc == 0 ? "Success" : "Action failed");
-}
 
 action_error_t handle_get_measurements(esp_ctx * ectxp, cJSON * params, cJSON **result) {
 	esp_request_t req = {0};
@@ -91,10 +74,10 @@ action_error_t handle_get_measurements(esp_ctx * ectxp, cJSON * params, cJSON **
 				goto next;
 		}
 		ret = ACTION_ERR_ESP_DATA_FAILED;
-		set_action_error(&resp, "Failed to collect esp data.");
+		*result = NULL;
+		goto cleanup;
 	}
 next:
-	ensure_action_message(&resp);
 
 	out = cJSON_CreateObject();
 	if(!out) {
@@ -103,7 +86,7 @@ next:
 	}
 
 	cJSON_AddNumberToObject(out, "rc", resp.rc);
-	cJSON_AddStringToObject(out, "msg", resp.msg ? resp.msg : "Action failed");
+	cJSON_AddStringToObject(out, "msg", resp.msg ? resp.msg : "");
 	if(resp.data) {
 		cJSON *data = cJSON_Parse(resp.data);
 		if(data) {
@@ -162,9 +145,10 @@ action_error_t handle_switch_pin(esp_ctx * ectxp, cJSON * params, cJSON **result
 							goto next1;
 					}
 					ret = ACTION_ERR_ESP_PIN_FAILED;
-					set_action_error(&resp, "Failed switch pin.");
+					*result = NULL;
+					goto cleanup;
 				}
-next1:
+				next1:
 			} else if(strcmp(p->valuestring, "off") == 0) {
 				st = esp_turn_off_pin(ectxp, &req, &resp);
 				if(st != ESP_OK) {
@@ -172,23 +156,21 @@ next1:
 						esp_reinit(ectxp);
 						st = esp_turn_off_pin(ectxp, &req, &resp);
 						if(st == ESP_OK)
-							goto next2;
-					}
+						goto next2;
+				}
 					ret = ACTION_ERR_ESP_PIN_FAILED;
-					set_action_error(&resp, "Failed switch pin.");
+					*result = NULL;
+					goto cleanup;
 				}
 next2:
 			} else {
 				ret = ACTION_ERR_UNSUPPORTED_STATE;
-				set_action_error(&resp, "Unsupported switch state.");
 			}
 		} else {
 			ret = ACTION_ERR_MISSING_STATE;
-			set_action_error(&resp, "Missing switch state.");
 		}
 	}
 
-	ensure_action_message(&resp);
 	out = cJSON_CreateObject();
 	if(!out) {
 		ret = ACTION_ERR_NO_MEMORY;
@@ -196,7 +178,7 @@ next2:
 	}
 
 	cJSON_AddNumberToObject(out, "rc", resp.rc);
-	cJSON_AddStringToObject(out, "msg", resp.msg ? resp.msg : "Action failed");
+	cJSON_AddStringToObject(out, "msg", resp.msg ? resp.msg : "");
 
 cleanup:
 	if(result) {
@@ -228,6 +210,8 @@ action_error_t handle_get_devices(esp_ctx * ectxp, cJSON *params, cJSON **result
 				goto next;
 		}
 		ret = ACTION_ERR_ESP_DEVICE_FAILED;
+		*result = NULL;
+		goto cleanup;
 	}
 next:
 
@@ -264,7 +248,7 @@ next:
 		}
 		cJSON_Delete(arr);
 	}
-
+cleanup:
 	if(result) {
 		*result = out;
 		out = NULL;
