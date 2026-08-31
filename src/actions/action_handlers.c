@@ -57,15 +57,14 @@ static void ensure_action_message(esp_response_t *response)
 	response->msg = strdup(response->rc == 0 ? "Success" : "Action failed");
 }
 
-action_error_t handle_get_measurements(tuya_mqtt_context_t * context,  esp_ctx * ectxp, cJSON * params) {
+action_error_t handle_get_measurements(esp_ctx * ectxp, cJSON * params, cJSON **result) {
 	esp_request_t req = {0};
 	esp_response_t resp = {0};
 	esp_status_t st = ESP_OK;
 	cJSON * out = NULL;
-	char * s = NULL;
 	action_error_t ret = ACTION_OK;
 
-	if(!context)
+	if(!ectxp)
 		return ACTION_ERR_INVALID_CONTEXT;
 
 	if(params) {
@@ -84,9 +83,7 @@ action_error_t handle_get_measurements(tuya_mqtt_context_t * context,  esp_ctx *
 	}
 
 	st = esp_get_data(ectxp, &req, &resp);
-	
 	if(st != ESP_OK) {
-		// in case when ubved was restarted when this daemon was running
 		if(st == ESP_ERR_UBUS_INVOKE && resp.ubus_status == UBUS_STATUS_NOT_FOUND) {
 			esp_reinit(ectxp);
 			st = esp_get_data(ectxp, &req, &resp);
@@ -123,33 +120,27 @@ next:
 		}
 	}
 
-	s = cJSON_PrintUnformatted(out);
-	if(s) {
-		int report_rc = tuyalink_thing_property_report(context, NULL, s);
-		if(report_rc != 0)
-			ret = ACTION_ERR_TUYA_REPORT_FAILED;
-		free(s);
-	} else {
-		ret = ACTION_ERR_INTERNAL;
-	}
-
 cleanup:
-	cJSON_Delete(out);
+	if(result) {
+		*result = out;
+		out = NULL;
+	} else if(out) {
+		cJSON_Delete(out);
+	}
 	esp_free_request(&req);
 	esp_free_response(&resp);
 	return ret;
 }
 
-action_error_t handle_switch_pin(tuya_mqtt_context_t * context, esp_ctx * ectxp, cJSON * params)
+action_error_t handle_switch_pin(esp_ctx * ectxp, cJSON * params, cJSON **result)
 {
 	esp_request_t req = {0};
 	esp_response_t resp = {0};
 	cJSON * out = NULL;
-	char * s = NULL;
 	action_error_t ret = ACTION_OK;
 	esp_status_t st;
 
-	if(!context)
+	if(!ectxp)
 		return ACTION_ERR_INVALID_CONTEXT;
 
 	if(params) {
@@ -173,7 +164,7 @@ action_error_t handle_switch_pin(tuya_mqtt_context_t * context, esp_ctx * ectxp,
 					ret = ACTION_ERR_ESP_PIN_FAILED;
 					set_action_error(&resp, "Failed switch pin.");
 				}
-next1: 
+next1:
 			} else if(strcmp(p->valuestring, "off") == 0) {
 				st = esp_turn_off_pin(ectxp, &req, &resp);
 				if(st != ESP_OK) {
@@ -186,7 +177,7 @@ next1:
 					ret = ACTION_ERR_ESP_PIN_FAILED;
 					set_action_error(&resp, "Failed switch pin.");
 				}
-next2: 
+next2:
 			} else {
 				ret = ACTION_ERR_UNSUPPORTED_STATE;
 				set_action_error(&resp, "Unsupported switch state.");
@@ -206,37 +197,30 @@ next2:
 
 	cJSON_AddNumberToObject(out, "rc", resp.rc);
 	cJSON_AddStringToObject(out, "msg", resp.msg ? resp.msg : "Action failed");
-	s = cJSON_PrintUnformatted(out);
-	if(s) {
-		int report_rc = tuyalink_thing_property_report(context, NULL, s);
-		if(report_rc != 0)
-			ret = ACTION_ERR_TUYA_REPORT_FAILED;
-		free(s);
-	} else {
-		ret = ACTION_ERR_INTERNAL;
-	}
 
 cleanup:
-	cJSON_Delete(out);
+	if(result) {
+		*result = out;
+		out = NULL;
+	} else if(out) {
+		cJSON_Delete(out);
+	}
 	esp_free_request(&req);
 	esp_free_response(&resp);
 	return ret;
 }
-
-action_error_t handle_get_devices(tuya_mqtt_context_t *context, esp_ctx * ectxp, cJSON *params) {
+action_error_t handle_get_devices(esp_ctx * ectxp, cJSON *params, cJSON **result) {
 	cJSON *out = NULL;
 	cJSON *arr = NULL;
-	char *payload = NULL;
 	action_error_t ret = ACTION_OK;
 	esp_device_list_t dl = {0};
 	esp_status_t st;
 
-	if(!context)
+	if(!ectxp)
 		return ACTION_ERR_INVALID_CONTEXT;
 
 	st = esp_get_devices(ectxp, &dl);
 	if(st != ESP_OK) {
-		// in case when ubved was restarted when this daemon was running
 		if(st == ESP_ERR_UBUS_INVOKE && dl.ubus_status == UBUS_STATUS_NOT_FOUND) {
 			esp_reinit(ectxp);
 			st = esp_get_devices(ectxp, &dl);
@@ -270,7 +254,7 @@ next:
 	}
 
 	if(arr) {
-		char * devices_json = cJSON_PrintUnformatted(arr);
+		char *devices_json = cJSON_PrintUnformatted(arr);
 		if(devices_json) {
 			cJSON_AddStringToObject(out, "devices", devices_json);
 			free(devices_json);
@@ -281,17 +265,12 @@ next:
 		cJSON_Delete(arr);
 	}
 
-	payload = cJSON_PrintUnformatted(out);
-	if(payload) {
-		int report_rc = tuyalink_thing_property_report(context, NULL, payload);
-		if(report_rc != 0)
-			ret = ACTION_ERR_TUYA_REPORT_FAILED;
-		free(payload);
-	} else {
-		ret = ACTION_ERR_INTERNAL;
+	if(result) {
+		*result = out;
+		out = NULL;
+	} else if(out) {
+		cJSON_Delete(out);
 	}
-
-	cJSON_Delete(out);
 	esp_free_device_list(&dl);
 	return ret;
 }

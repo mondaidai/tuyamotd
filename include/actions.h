@@ -2,6 +2,7 @@
 #define ACTIONS_H
 
 #include "tuyalink_core.h"
+#include "esp_actions.h"
 
 void on_connected(tuya_mqtt_context_t * context, void * user_data);
 void on_disconnect(tuya_mqtt_context_t * context, void * user_data);

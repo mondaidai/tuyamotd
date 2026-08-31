@@ -23,8 +23,8 @@ typedef enum {
 
 const char * action_error_to_string(action_error_t error);
 
-action_error_t handle_get_measurements(tuya_mqtt_context_t * context,  esp_ctx * ectxp, cJSON * params);
-action_error_t handle_switch_pin(tuya_mqtt_context_t * context,  esp_ctx * ectxp, cJSON * params);
-action_error_t handle_get_devices(tuya_mqtt_context_t * context,  esp_ctx * ectxp, cJSON * params);
+action_error_t handle_get_measurements(esp_ctx * ectxp, cJSON * params, cJSON **result);
+action_error_t handle_switch_pin(esp_ctx * ectxp, cJSON * params, cJSON **result);
+action_error_t handle_get_devices(esp_ctx * ectxp, cJSON * params, cJSON **result);
 
 #endif

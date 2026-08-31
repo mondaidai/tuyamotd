@@ -49,8 +49,15 @@ int main(int argc, char * argv[])
 	int mret = APP_EXIT_SUCCESS;
 	int ret = OPRT_OK;
 	tuya_mqtt_context_t client;
-	esp_ctx ectx = {0};
+	esp_ctx *ectx = NULL;
 	struct ubus_context * uctx = NULL;
+
+	ectx = calloc(1, sizeof(esp_ctx));
+	if(!ectx) {
+		syslog(LOG_ERR, "Failed to allocate esp context");
+		mret = APP_EXIT_MONITORING_FAILED;
+		goto cleanup;
+	}
 
 	openlog("tuyamotd", LOG_PID | LOG_CONS, LOG_DAEMON);
 	app_args args;
@@ -76,6 +83,21 @@ int main(int argc, char * argv[])
 		}
 	}
 
+	uctx = ubus_connect(NULL);
+	if(!uctx) {
+		syslog(LOG_ERR, "Failed to connect to ubus");
+		mret = APP_EXIT_MONITORING_FAILED;
+		goto cleanup_ubus;
+	}
+
+	if(esp_init(ectx, uctx) != ESP_OK) {
+		syslog(LOG_ERR, "Failed to init esp actions module");
+		goto cleanup_ubus;
+	}
+
+    /* set ubus timeout from config */
+    ectx->ubus_timeout_ms = app_config.ubus_timeout_ms;
+
 // ----------- Tuya MQTT Initialization and Connection -----------
 
 	ret = tuya_mqtt_init(&client, &(const tuya_mqtt_config_t) {
@@ -90,7 +112,7 @@ int main(int argc, char * argv[])
 		.on_connected = on_connected,
 		.on_disconnect = on_disconnect,
 		.on_messages = on_messages,
-		.user_data = (void*)&ectx
+		.user_data = (void*)ectx
 	});
 
 	if(ret != OPRT_OK)
@@ -101,32 +123,15 @@ int main(int argc, char * argv[])
 	}
 	syslog(LOG_INFO, "tuya_mqtt_init successful");
 
-	ret = tuya_mqtt_connect(&client);
-	if(ret == OPRT_OK) {
-		syslog(LOG_INFO, "tuya_mqtt_connect successful");
-	} else {
-		syslog(LOG_ERR, "tuya_mqtt_connect failure: %d", ret);
-		mret = APP_EXIT_MQTT_CONNECT_FAILED;
-		goto cleanup_tuya;
-	}
+    ret = tuya_mqtt_connect(&client);
 	
-// ----------- UBus Initialization and Monitoring Setup -----------
-
-	uctx = ubus_connect(NULL);
-	
-	if(!uctx) {
-		syslog(LOG_ERR, "Failed to connect to ubus");
-		mret = APP_EXIT_MONITORING_FAILED;
-		goto cleanup_ubus;
-	}
-
-	if(esp_init(&ectx, uctx) != ESP_OK) {
-		syslog(LOG_ERR, "Failed to init esp actions module");
-		goto cleanup_ubus;
-	}
-
-	/* set ubus timeout from config */
-	ectx.ubus_timeout_ms = app_config.ubus_timeout_ms;
+    if(ret == OPRT_OK) {
+        syslog(LOG_INFO, "tuya_mqtt_connect successful");
+    } else {
+        syslog(LOG_ERR, "tuya_mqtt_connect failure: %d", ret);
+        mret = APP_EXIT_MQTT_CONNECT_FAILED;
+        goto cleanup_tuya;
+    }
 
 	const int mqtt_failure_timeout_sec = 6*60*60;
 	const int mqtt_backoff_cap = 30*60; 
@@ -171,10 +176,16 @@ int main(int argc, char * argv[])
 	
 cleanup_ubus:
 
-	esp_destroy(&ectx);
+	if(ectx) {
+		esp_destroy(ectx);
+	}
 	if(uctx) {
 		ubus_free(uctx);
 		uctx = NULL;
+	}
+	if(ectx) {
+		free(ectx);
+		ectx = NULL;
 	}
 cleanup_tuya:
 	tuya_mqtt_disconnect(&client);

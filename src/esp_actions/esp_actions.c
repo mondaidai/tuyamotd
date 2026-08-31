@@ -22,7 +22,7 @@ int esp_init(esp_ctx * ectx, struct ubus_context * uctx)
 
 	ectx->uctx = uctx;
 	ectx->ubved_id = ubved_id;
-	ectx->ubus_timeout_ms = 5000;
+	ectx->ubus_timeout_ms = 8000;
 	return ESP_OK;
 }
 
@@ -235,104 +235,143 @@ static void esp_get_data_cb(struct ubus_request *req, int type, struct blob_attr
 	wrapper->esp_status = ESP_OK;
 }
 
-static void esp_get_devices_cb(struct ubus_request *req, int type, struct blob_attr *msg)
+static void esp_get_devices_cb(struct ubus_request * req, int type, struct blob_attr * msg)
 {
-	esp_response_wrapper_t *data;
+	enum {
+		DEVICES_ATTR,
+		__TOP_MAX
+	};
+
+	enum {
+		PORT_ATTR,
+		VID_ATTR,
+		PID_ATTR,
+		__DEV_MAX
+	};
+
+	static const struct blobmsg_policy top_policy[] = {
+		[DEVICES_ATTR] = {
+			.name = "devices",
+			.type = BLOBMSG_TYPE_ARRAY
+		}
+	};
+
+	static const struct blobmsg_policy dev_policy[] = {
+		[PORT_ATTR] = {
+			.name = "port",
+			.type = BLOBMSG_TYPE_STRING
+		},
+		[VID_ATTR] = {
+			.name = "vendor_id",
+			.type = BLOBMSG_TYPE_STRING
+		},
+		[PID_ATTR] = {
+			.name = "product_id",
+			.type = BLOBMSG_TYPE_STRING
+		}
+	};
+
+	esp_response_wrapper_t *wrapper;
 	esp_device_list_t *response;
-	struct blob_attr *devs_attr;
-	int rem;
+	struct blob_attr *top_tb[__TOP_MAX];
+	struct blob_attr *entry;
 	size_t count = 0;
+	size_t capacity = 0;
+	int rem;
 
 	(void)type;
 
 	if(!req || !req->priv)
 		return;
 
-	data = req->priv;
-	response = data->response;
+	wrapper = req->priv;
+	response = wrapper->response;
+
 	if(!response) {
-		data->esp_status = ESP_ERR_INVALID_ARG;
-		return;
-	}
-
-	if(!msg) {
-		data->esp_status = ESP_ERR_PARSE;
-		return;
-	}
-
-	blobmsg_for_each_attr(devs_attr, msg, rem) {
-		const char *name = blobmsg_name(devs_attr);
-		struct blob_attr *entry;
-		int rem2;
-		size_t idx;
-
-		if(!name || strcmp(name, "devices") != 0)
-			continue;
-		if(blobmsg_type(devs_attr) != BLOBMSG_TYPE_ARRAY)
-			continue;
-
-		count = 0;
-		blobmsg_for_each_attr(entry, blobmsg_data(devs_attr), rem2) {
-			if(blobmsg_type(entry) == BLOBMSG_TYPE_TABLE)
-				++count;
-		}
-
-		response->size = count;
-		response->edl = NULL;
-		if(count == 0) {
-			data->esp_status = ESP_OK;
-			return;
-		}
-
-		response->edl = calloc(count, sizeof(*response->edl));
-		if(!response->edl) {
-			response->size = 0;
-			data->esp_status = ESP_ERR_NOMEM;
-			return;
-		}
-
-		idx = 0;
-		blobmsg_for_each_attr(entry, blobmsg_data(devs_attr), rem2) {
-			static const struct blobmsg_policy info_policy[] = {
-				{ .name = "port", .type = BLOBMSG_TYPE_STRING },
-				{ .name = "vendor_id", .type = BLOBMSG_TYPE_STRING },
-				{ .name = "product_id", .type = BLOBMSG_TYPE_STRING },
-			};
-			struct blob_attr *tb[3];
-			const char *port = NULL;
-			const char *vids = NULL;
-			const char *pids = NULL;
-
-			if(blobmsg_type(entry) != BLOBMSG_TYPE_TABLE)
-				continue;
-
-			memset(tb, 0, sizeof(tb));
-			blobmsg_parse(info_policy, ARRAY_SIZE(tb), tb, blobmsg_data(entry), blobmsg_data_len(entry));
-
-			port = tb[0] ? blobmsg_get_string(tb[0]) : NULL;
-			vids = tb[1] ? blobmsg_get_string(tb[1]) : NULL;
-			pids = tb[2] ? blobmsg_get_string(tb[2]) : NULL;
-
-			response->edl[idx].portname = port ? strdup(port) : NULL;
-			response->edl[idx].vid = vids ? (int)strtol(vids, NULL, 0) : 0;
-			response->edl[idx].pid = pids ? (int)strtol(pids, NULL, 0) : 0;
-
-			if(!response->edl[idx].portname && port) {
-				esp_free_device_list(response);
-				data->esp_status = ESP_ERR_NOMEM;
-				return;
-			}
-
-			idx++;
-		}
-
-		data->esp_status = ESP_OK;
+		wrapper->esp_status = ESP_ERR_INVALID_ARG;
 		return;
 	}
 
 	response->edl = NULL;
 	response->size = 0;
-	data->esp_status = ESP_OK;
+
+	if(!msg) {
+		wrapper->esp_status = ESP_ERR_PARSE;
+		return;
+	}
+
+	memset(top_tb, 0, sizeof(top_tb));
+
+	blobmsg_parse(top_policy, ARRAY_SIZE(top_policy), top_tb, blobmsg_data(msg), blobmsg_data_len(msg));
+
+	if(!top_tb[DEVICES_ATTR]) {
+		wrapper->esp_status = ESP_OK;
+		return;
+	}
+	
+	if(blobmsg_type(top_tb[DEVICES_ATTR]) != BLOBMSG_TYPE_ARRAY) {
+		wrapper->esp_status = ESP_ERR_PARSE;
+		return;
+	}
+
+	blobmsg_for_each_attr(entry, top_tb[DEVICES_ATTR], rem) {
+		struct blob_attr *dev_tb[__DEV_MAX];
+		esp_device_t *dev;
+		const char *port;
+		const char *vid;
+		const char *pid;
+
+		if(blobmsg_type(entry) != BLOBMSG_TYPE_TABLE)
+			continue;
+
+		memset(dev_tb, 0, sizeof(dev_tb));
+
+		blobmsg_parse(dev_policy, ARRAY_SIZE(dev_policy), dev_tb, blobmsg_data(entry), blobmsg_data_len(entry));
+
+		port = dev_tb[PORT_ATTR] ? blobmsg_get_string(dev_tb[PORT_ATTR]) : NULL;
+		vid = dev_tb[VID_ATTR] ? blobmsg_get_string(dev_tb[VID_ATTR]) : NULL;
+		pid = dev_tb[PID_ATTR] ? blobmsg_get_string(dev_tb[PID_ATTR]) : NULL;
+		if(count >= capacity) {
+			size_t new_capacity = capacity ? capacity * 2 : 4;
+			esp_device_t *tmp;
+
+			tmp = realloc(response->edl,
+						  new_capacity * sizeof(*response->edl));
+
+			if(!tmp) {
+				esp_free_device_list(response);
+				wrapper->esp_status = ESP_ERR_NOMEM;
+				return;
+			}
+
+			response->edl = tmp;
+
+			memset(response->edl + capacity, 0, (new_capacity - capacity) * sizeof(*response->edl));
+			capacity = new_capacity;
+		}
+
+		dev = &response->edl[count];
+		memset(dev, 0, sizeof(*dev));
+
+		if(port) {
+			dev->portname = strdup(port);
+
+			if(!dev->portname) {
+				esp_free_device_list(response);
+				wrapper->esp_status = ESP_ERR_NOMEM;
+				return;
+			}
+		}
+
+		dev->vid = vid ? (int)strtol(vid, NULL, 0) : 0;
+		dev->pid = pid ? (int)strtol(pid, NULL, 0) : 0;
+
+		count++;
+	}
+
+	response->size = count;
+	wrapper->esp_status = ESP_OK;
+	return;
 }
 
 esp_status_t esp_turn_on_pin(esp_ctx * ectx, esp_request_t * params, esp_response_t * response)
@@ -441,7 +480,7 @@ esp_status_t esp_get_devices(esp_ctx * ectx, esp_device_list_t * response)
 	erw.response = response;
 	erw.esp_status = ESP_OK;
 
-	if((ubus_ret = ubus_invoke(ectx->uctx, ectx->ubved_id, "get", NULL, esp_get_devices_cb, &erw, ectx->ubus_timeout_ms)) != UBUS_STATUS_OK) {
+	if((ubus_ret = ubus_invoke(ectx->uctx, ectx->ubved_id, "devices", NULL, esp_get_devices_cb, &erw, ectx->ubus_timeout_ms)) != UBUS_STATUS_OK) {
 		response->ubus_status = ubus_ret;
 		result = ESP_ERR_UBUS_INVOKE;
 	} else {
