@@ -10,7 +10,7 @@ PATCH_FILES := patches/010-make_dynamic_lib.patch patches/020-fix_user_data.patc
 all: app
 
 submodules:
-	git submodule update --init --recursive --force
+	git submodule update --init --recursive --remote --force
 
 patches: $(PATCH_STAMP)
 
