@@ -1,0 +1,20 @@
+Index: tuya_iot_core-1.0.0/src/tuyalink_core.c
+===================================================================
+--- tuya_iot_core-1.0.0.orig/src/tuyalink_core.c
++++ tuya_iot_core-1.0.0/src/tuyalink_core.c
+@@ -473,7 +473,7 @@ int tuya_mqtt_init(tuya_mqtt_context_t*
+ 
+ 	/* configuration */
+ 	context->config = *config;
+-
++	context->user_data = config->user_data;
+ 	/* Device token signature */
+ 	rt = tuya_mqtt_auth_signature_calculate(config->device_id, config->device_secret,
+ 		context->mqtt_auth.clientid, context->mqtt_auth.username, context->mqtt_auth.password);
+@@ -1068,4 +1068,4 @@ int tuyalink_tag_delete(tuya_mqtt_contex
+ 		.ack = false
+ 	};
+ 	return tuyalink_message_send(context, &message);
+-}
+\ No newline at end of file
++}
