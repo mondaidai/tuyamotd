@@ -2,12 +2,13 @@
 #define SIGNALS_H
 
 #include <signal.h>
-extern volatile sig_atomic_t keep_running;
 
 typedef void Sigfunc(int);
 
-Sigfunc *Signal(int signo, Sigfunc *func);
+extern volatile sig_atomic_t keep_running;
 
 void handle_signal(int signo);
+
+Sigfunc *Signal(int signo, Sigfunc *func);
 
 #endif

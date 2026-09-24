@@ -1,13 +1,12 @@
 #include "signals.h"
 #include <signal.h>
-#include <libubox/uloop.h>
 
 volatile sig_atomic_t keep_running = 1;
 
-void handle_signal(int signo) {
-	(void)signo;
-	keep_running = 0;
-	uloop_end();
+void handle_signal(int signo)
+{
+    (void)signo;
+    keep_running = 0;
 }
 
 Sigfunc * Signal(int signo, Sigfunc *func)

@@ -1,40 +1,20 @@
-CFLAGS := -Iinclude
+SDK_DIR := vendor/tuya-iot-core-sdk
+SDK_BUILD := $(SDK_DIR)/build
+SRC_DIR := src
 
-LDFLAGS := \
-	-llink_core \
-	-lmiddleware_implementation \
-	-lplatform_port \
-	-lutils_modules \
-	-lcjson \
-	-largp \
-	-lblobmsg_json \
-	-lubox \
-	-lubus \
-	-luci
+.PHONY: all sdk app clean
 
-OBJ_DIR := obj
-BUILD_DIR := build
-TARGET := tuyamotd
+all: sdk app
 
-SRCS := \
-    $(wildcard src/*.c) \
-    $(wildcard src/monitoring/*.c)
+sdk:
+	cmake -S $(SDK_DIR) -B $(SDK_BUILD) -DBUILD_SHARED_LIBS=ON
+	cmake --build $(SDK_BUILD)
 
-OBJS := $(addprefix $(OBJ_DIR)/,$(SRCS:.c=.o))
-
-.PHONY: all clean
-
-all: $(BUILD_DIR)/$(TARGET)
-
-$(BUILD_DIR)/$(TARGET): $(OBJS) | $(BUILD_DIR)
-	$(CC) $(OBJS) -o $@ $(LDFLAGS)
-
-$(OBJ_DIR)/%.o: %.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR):
-	mkdir -p $@
+app:
+	$(MAKE) -C $(SRC_DIR) SDK_DIR=../$(SDK_DIR)
 
 clean:
-	rm -rf $(OBJ_DIR) $(BUILD_DIR)
+	$(MAKE) -C $(SRC_DIR) clean
+	@if [ -f $(SDK_BUILD)/Makefile ]; then \
+		$(MAKE) -C $(SDK_BUILD) clean; \
+	fi
